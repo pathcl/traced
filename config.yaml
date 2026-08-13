@@ -10,9 +10,9 @@ mimir:
   tenant_id: ""          # same pattern as tempo
 
 analysis:
-  baggage_keys: [tenant, country]
+  # baggage_keys: [tenant, country]  # omit to auto-discover from live span data
   root_anomaly_threshold: 0.001
   min_callee_count: 50
 
 output:
-  format: json           # json | table
+  format: summary        # summary | json | table
