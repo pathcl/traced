@@ -1,0 +1,18 @@
+tempo:
+  url: http://localhost:3200
+  poll_interval: 5m
+  lookback: 10m
+  sample_limit: 200
+  tenant_id: ""          # set to send X-Scope-OrgID; omit for single-tenant
+
+mimir:
+  url: http://localhost:9009
+  tenant_id: ""          # same pattern as tempo
+
+analysis:
+  baggage_keys: [tenant, country]
+  root_anomaly_threshold: 0.001
+  min_callee_count: 50
+
+output:
+  format: json           # json | table
