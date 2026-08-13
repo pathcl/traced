@@ -1,0 +1,38 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Build the traced binary
+    cmds:
+      - task: build
+
+  build:
+    desc: Compile traced to ./traced
+    cmds:
+      - go build -o traced ./cmd/traced
+    sources:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+    generates:
+      - traced
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  test:verbose:
+    desc: Run all tests with verbose output
+    cmds:
+      - go test -v -count=1 ./...
+
+  lint:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  clean:
+    desc: Remove the compiled binary
+    cmds:
+      - rm -f traced
