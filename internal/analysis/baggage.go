@@ -17,8 +17,8 @@ type EdgeStats struct {
 	AttrDrops map[string]int // attr → number of times callee was missing it
 }
 
-// BaggageDrop is a finding for one edge that drops a specific attribute.
-type BaggageDrop struct {
+// SpanAttributeDrop is a finding for one edge that drops a specific attribute.
+type SpanAttributeDrop struct {
 	Caller    string    `json:"caller"`
 	Callee    string    `json:"callee"`
 	Attribute string    `json:"attribute"`
@@ -28,12 +28,13 @@ type BaggageDrop struct {
 	Window    time.Time `json:"window"`
 }
 
-// DetectBaggageDrops walks span trees and finds edges where a baggage attribute
-// present on an ancestor disappears on a descendant.
+// DetectSpanAttributeDrops walks span trees and finds edges where a configured
+// span attribute present on a parent span is absent on the child span.
 //
-// The root span is the authority: any attribute it carries is expected to be
-// present on every span in the trace. We flag the first edge where it vanishes.
-func DetectBaggageDrops(trees [][]*tempo.Span, baggageKeys []string, window time.Time) []BaggageDrop {
+// attrs is the user-configured list of span attribute keys to track
+// (config: span_attributes). Only attributes present on the parent are checked —
+// if the parent doesn't carry it, no drop is recorded for that edge.
+func DetectSpanAttributeDrops(trees [][]*tempo.Span, attrs []string, window time.Time) []SpanAttributeDrop {
 	edges := make(map[EdgeKey]*EdgeStats)
 
 	for _, roots := range trees {
@@ -48,7 +49,7 @@ func DetectBaggageDrops(trees [][]*tempo.Span, baggageKeys []string, window time
 			e := edges[key]
 			e.Total++
 
-			for _, attr := range baggageKeys {
+			for _, attr := range attrs {
 				parentHas := parent.Attrs[attr] != ""
 				childHas := span.Attrs[attr] != ""
 				if parentHas && !childHas {
@@ -58,13 +59,13 @@ func DetectBaggageDrops(trees [][]*tempo.Span, baggageKeys []string, window time
 		})
 	}
 
-	var findings []BaggageDrop
+	var findings []SpanAttributeDrop
 	for key, e := range edges {
 		for attr, dropped := range e.AttrDrops {
 			if dropped == 0 {
 				continue
 			}
-			findings = append(findings, BaggageDrop{
+			findings = append(findings, SpanAttributeDrop{
 				Caller:    key.Caller,
 				Callee:    key.Callee,
 				Attribute: attr,

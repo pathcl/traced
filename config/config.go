@@ -28,7 +28,7 @@ type MimirConfig struct {
 }
 
 type AnalysisConfig struct {
-	BaggageKeys           []string `yaml:"baggage_keys"`
+	SpanAttributes        []string `yaml:"span_attributes"`
 	RootAnomalyThreshold  float64  `yaml:"root_anomaly_threshold"`
 	MinCalleeCount        int      `yaml:"min_callee_count"`
 }
@@ -61,7 +61,7 @@ func defaults() *Config {
 			URL: "http://localhost:9009",
 		},
 		Analysis: AnalysisConfig{
-			BaggageKeys:          []string{}, // empty = auto-discover from span data
+			SpanAttributes:       []string{}, // empty = auto-discover from span data
 			RootAnomalyThreshold: 0.001,
 			MinCalleeCount:       50,
 		},

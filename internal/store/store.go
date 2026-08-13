@@ -98,7 +98,7 @@ func (s *Store) SaveSpans(ctx context.Context, tickID string, trees [][]*tempo.S
 // SaveFindings persists all three finding types for one tick.
 func (s *Store) SaveFindings(ctx context.Context, tickID string,
 	roots []analysis.RootAnomaly,
-	drops []analysis.BaggageDrop,
+	drops []analysis.SpanAttributeDrop,
 	gaps []analysis.LabelGap,
 ) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -222,17 +222,17 @@ func (s *Store) QueryOrphanCreators(ctx context.Context) ([]OrphanCreator, error
 	return out, rows.Err()
 }
 
-// BaggageDrop is a baggage drop finding produced by querying stored span data.
-type BaggageDrop struct {
-	Caller      string
-	Callee      string
-	DroppedKey  string
+// AttributeDrop is a span attribute drop finding produced by querying stored span data.
+type AttributeDrop struct {
+	Caller       string
+	Callee       string
+	DroppedKey   string
 	TimesDropped int
-	TotalCalls  int
-	DropPct     float64
+	TotalCalls   int
+	DropPct      float64
 }
 
-// QueryBaggageDrops performs a schema-agnostic baggage drop analysis over all
+// QueryAttributeDrops performs a schema-agnostic baggage drop analysis over all
 // stored spans using a self-join on (trace_id, parent_span_id).
 //
 // For every parent-child span pair it finds attribute keys that are present on
@@ -243,7 +243,7 @@ type BaggageDrop struct {
 //
 // otelFilter controls whether OTel semantic-convention keys (http.*, db.*, …)
 // are excluded from results.
-func (s *Store) QueryBaggageDrops(ctx context.Context, otelFilter bool) ([]BaggageDrop, error) {
+func (s *Store) QueryAttributeDrops(ctx context.Context, otelFilter bool) ([]AttributeDrop, error) {
 	otelClause := ""
 	if otelFilter {
 		// Exclude keys that belong to OTel semantic convention namespaces.
@@ -292,13 +292,13 @@ func (s *Store) QueryBaggageDrops(ctx context.Context, otelFilter bool) ([]Bagga
 
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("QueryBaggageDrops: %w", err)
+		return nil, fmt.Errorf("QueryAttributeDrops: %w", err)
 	}
 	defer rows.Close()
 
-	var out []BaggageDrop
+	var out []AttributeDrop
 	for rows.Next() {
-		var d BaggageDrop
+		var d AttributeDrop
 		if err := rows.Scan(&d.Caller, &d.Callee, &d.DroppedKey,
 			&d.TimesDropped, &d.TotalCalls, &d.DropPct); err != nil {
 			return nil, err
@@ -322,7 +322,7 @@ type ServiceCoverage struct {
 // Services with low coverage are candidates for missing context propagation.
 //
 // The query discovers baggage keys dynamically (excluding OTel semantic namespaces)
-// so it works without any prior configuration of baggage_keys.
+// so it works without any prior configuration of span_attributes.
 func (s *Store) QueryBaggageCoverage(ctx context.Context) ([]ServiceCoverage, error) {
 	q := `
 		WITH

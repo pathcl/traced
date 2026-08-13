@@ -141,7 +141,7 @@ func TestSaveFindings_allThreeTypes(t *testing.T) {
 	roots := []analysis.RootAnomaly{
 		{Service: "billing", AsCallee: 100, AsRoot: 5, DropRate: 0.05, Window: now},
 	}
-	drops := []analysis.BaggageDrop{
+	drops := []analysis.SpanAttributeDrop{
 		{Caller: "api", Callee: "billing", Attribute: "tenant", DropRate: 0.3, Dropped: 30, Total: 100, Window: now},
 	}
 	gaps := []analysis.LabelGap{
@@ -192,7 +192,7 @@ func TestSaveFindings_allThreeTypes(t *testing.T) {
 	}
 }
 
-func TestQueryBaggageDrops_detectsDrops(t *testing.T) {
+func TestQueryAttributeDrops_detectsDrops(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -262,11 +262,11 @@ func TestQueryBaggageDrops_detectsDrops(t *testing.T) {
 	}
 
 	// Without OTel filter: should see both tenant and http.method drops.
-	all, err := s.QueryBaggageDrops(ctx, false)
+	all, err := s.QueryAttributeDrops(ctx, false)
 	if err != nil {
-		t.Fatalf("QueryBaggageDrops(otelFilter=false): %v", err)
+		t.Fatalf("QueryAttributeDrops(otelFilter=false): %v", err)
 	}
-	byKey := map[string]BaggageDrop{}
+	byKey := map[string]AttributeDrop{}
 	for _, d := range all {
 		if d.Caller == "api" && d.Callee == "billing" {
 			byKey[d.DroppedKey] = d
@@ -286,11 +286,11 @@ func TestQueryBaggageDrops_detectsDrops(t *testing.T) {
 	}
 
 	// With OTel filter: http.method should disappear, tenant should remain.
-	filtered, err := s.QueryBaggageDrops(ctx, true)
+	filtered, err := s.QueryAttributeDrops(ctx, true)
 	if err != nil {
-		t.Fatalf("QueryBaggageDrops(otelFilter=true): %v", err)
+		t.Fatalf("QueryAttributeDrops(otelFilter=true): %v", err)
 	}
-	byKeyFiltered := map[string]BaggageDrop{}
+	byKeyFiltered := map[string]AttributeDrop{}
 	for _, d := range filtered {
 		if d.Caller == "api" && d.Callee == "billing" {
 			byKeyFiltered[d.DroppedKey] = d
@@ -304,7 +304,7 @@ func TestQueryBaggageDrops_detectsDrops(t *testing.T) {
 	}
 }
 
-func TestQueryBaggageDrops_noDrops(t *testing.T) {
+func TestQueryAttributeDrops_noDrops(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -322,9 +322,9 @@ func TestQueryBaggageDrops_noDrops(t *testing.T) {
 		t.Fatalf("SaveSpans: %v", err)
 	}
 
-	drops, err := s.QueryBaggageDrops(ctx, true)
+	drops, err := s.QueryAttributeDrops(ctx, true)
 	if err != nil {
-		t.Fatalf("QueryBaggageDrops: %v", err)
+		t.Fatalf("QueryAttributeDrops: %v", err)
 	}
 	if len(drops) != 0 {
 		t.Errorf("expected no drops, got: %+v", drops)

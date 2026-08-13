@@ -30,10 +30,10 @@ type CoverageAnomaly struct {
 // Only services with at least minSpans observed are considered, to avoid
 // flagging services seen only once or twice in the sample.
 //
-// baggageKeys should come from config or DiscoverBaggageKeys. A span is
+// spanAttrs should come from config or DiscoverBaggageKeys. A span is
 // counted as "carrying baggage" if it has at least one key present and non-empty.
-func DetectNoCoverage(trees [][]*tempo.Span, baggageKeys []string, minSpans int, maxCoverage float64, window time.Time) []CoverageAnomaly {
-	if len(baggageKeys) == 0 {
+func DetectNoCoverage(trees [][]*tempo.Span, spanAttrs []string, minSpans int, maxCoverage float64, window time.Time) []CoverageAnomaly {
+	if len(spanAttrs) == 0 {
 		return nil
 	}
 
@@ -53,7 +53,7 @@ func DetectNoCoverage(trees [][]*tempo.Span, baggageKeys []string, minSpans int,
 			s := m[span.Service]
 			s.total++
 
-			for _, k := range baggageKeys {
+			for _, k := range spanAttrs {
 				if span.Attrs[k] != "" {
 					s.withBaggage++
 					break // count each span once regardless of how many keys it has

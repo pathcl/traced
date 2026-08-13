@@ -12,10 +12,10 @@ import (
 	"github.com/pathcl/traced/internal/testutil"
 )
 
-// TestQueryBaggageDrops_withMockTraces runs the full pipeline:
+// TestQueryAttributeDrops_withMockTraces runs the full pipeline:
 //
 //	testutil.TraceBuilder → OTLP JSON → httptest → FetchTrace → BuildTree
-//	→ SaveSpans → QueryBaggageDrops
+//	→ SaveSpans → QueryAttributeDrops
 //
 // Scenario: frontend → api-gateway → payment-svc → billing-svc
 //
@@ -23,7 +23,7 @@ import (
 //   - api-gateway → payment-svc: country drops intermittently (3/10 calls)
 //   - payment-svc → billing-svc: both tenant AND country drop every call
 //     (systematic misconfiguration — baggage propagation not enabled)
-func TestQueryBaggageDrops_withMockTraces(t *testing.T) {
+func TestQueryAttributeDrops_withMockTraces(t *testing.T) {
 	corpus := buildCorpus()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,14 +61,14 @@ func TestQueryBaggageDrops_withMockTraces(t *testing.T) {
 		t.Fatalf("SaveSpans: %v", err)
 	}
 
-	drops, err := s.QueryBaggageDrops(context.Background(), true)
+	drops, err := s.QueryAttributeDrops(context.Background(), true)
 	if err != nil {
-		t.Fatalf("QueryBaggageDrops: %v", err)
+		t.Fatalf("QueryAttributeDrops: %v", err)
 	}
 
 	// Index results by edge+key for easy assertions.
 	type edgeKey struct{ caller, callee, key string }
-	byEdge := map[edgeKey]BaggageDrop{}
+	byEdge := map[edgeKey]AttributeDrop{}
 	for _, d := range drops {
 		byEdge[edgeKey{d.Caller, d.Callee, d.DroppedKey}] = d
 	}

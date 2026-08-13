@@ -119,7 +119,7 @@ func TestTraceparentDrop_fullPipeline(t *testing.T) {
 // TestTraceparentDrop_baggageAlsoLost documents the relationship between the
 // two detectors. When traceparent is dropped, the orphan span also loses
 // baggage — but baggage drop detection requires a parent-child pair in the
-// SAME trace. An orphan root has no parent in its trace, so DetectBaggageDrops
+// SAME trace. An orphan root has no parent in its trace, so DetectSpanAttributeDrops
 // cannot see the drop. DetectRootAnomalies catches it instead.
 //
 // This test pins that boundary explicitly so the behaviour is intentional,
@@ -179,7 +179,7 @@ func TestTraceparentDrop_baggageAlsoLost(t *testing.T) {
 	// correctly through api→billing, and the orphan has no parent to compare
 	// against. This is correct and expected: the root anomaly finding IS the
 	// signal for the baggage loss in this case.
-	baggageFindings := DetectBaggageDrops(trees, []string{"tenant"}, time.Now())
+	baggageFindings := DetectSpanAttributeDrops(trees, []string{"tenant"}, time.Now())
 	for _, f := range baggageFindings {
 		t.Errorf("unexpected baggage finding (orphan roots have no parent to diff against): %+v", f)
 	}

@@ -16,26 +16,26 @@ func makeSpanWithAttrs(spanID, parentID, service string, attrs map[string]string
 	}
 }
 
-func TestDetectBaggageDrops_noDrop(t *testing.T) {
+func TestDetectSpanAttributeDrops_noDrop(t *testing.T) {
 	parent := makeSpanWithAttrs("s1", "", "api", map[string]string{"tenant": "acme"})
 	child := makeSpanWithAttrs("s2", "s1", "billing", map[string]string{"tenant": "acme"})
 	parent.Children = []*tempo.Span{child}
 
 	trees := [][]*tempo.Span{{parent}}
-	findings := DetectBaggageDrops(trees, []string{"tenant"}, time.Now())
+	findings := DetectSpanAttributeDrops(trees, []string{"tenant"}, time.Now())
 	if len(findings) != 0 {
 		t.Errorf("expected no drops, got %+v", findings)
 	}
 }
 
-func TestDetectBaggageDrops_drop(t *testing.T) {
+func TestDetectSpanAttributeDrops_drop(t *testing.T) {
 	parent := makeSpanWithAttrs("s1", "", "api", map[string]string{"tenant": "acme"})
 	// billing drops tenant.
 	child := makeSpanWithAttrs("s2", "s1", "billing", map[string]string{})
 	parent.Children = []*tempo.Span{child}
 
 	trees := [][]*tempo.Span{{parent}}
-	findings := DetectBaggageDrops(trees, []string{"tenant"}, time.Now())
+	findings := DetectSpanAttributeDrops(trees, []string{"tenant"}, time.Now())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
@@ -48,7 +48,7 @@ func TestDetectBaggageDrops_drop(t *testing.T) {
 	}
 }
 
-func TestDetectBaggageDrops_partialDrop(t *testing.T) {
+func TestDetectSpanAttributeDrops_partialDrop(t *testing.T) {
 	// 10 calls api→billing, 3 of them drop tenant.
 	var trees [][]*tempo.Span
 	for i := 0; i < 7; i++ {
@@ -63,7 +63,7 @@ func TestDetectBaggageDrops_partialDrop(t *testing.T) {
 		p.Children = []*tempo.Span{c}
 		trees = append(trees, []*tempo.Span{p})
 	}
-	findings := DetectBaggageDrops(trees, []string{"tenant"}, time.Now())
+	findings := DetectSpanAttributeDrops(trees, []string{"tenant"}, time.Now())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}

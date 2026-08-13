@@ -65,7 +65,7 @@ func main() {
 	ticker := time.NewTicker(cfg.Tempo.PollInterval)
 	defer ticker.Stop()
 
-	tick() // run immediately on start
+	tick()
 	for {
 		select {
 		case <-ctx.Done():
@@ -84,7 +84,7 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 
 	slog.Info("running analysis tick", "tick_id", tickID, "start", start, "end", now)
 
-	// --- Tempo: three parallel query categories ---
+	// --- Tempo queries ---
 
 	broadResults, err := tempoClient.Search(ctx, `{}`, start, now, cfg.Tempo.SampleLimit)
 	if err != nil {
@@ -97,13 +97,12 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 		orphanResults = nil
 	}
 
-	// Attribute gap queries: only run when baggage_keys are explicitly configured.
-	// In discovery mode (empty keys) we rely on the broad sample.
+	// Targeted gap queries only when span_attributes are explicitly configured.
 	var gapResults []tempo.SearchResult
-	for _, key := range cfg.Analysis.BaggageKeys {
+	for _, key := range cfg.Analysis.SpanAttributes {
 		q := fmt.Sprintf(`{span.%s = ""}`, key)
 		limit := cfg.Tempo.SampleLimit
-		if n := len(cfg.Analysis.BaggageKeys); n > 1 {
+		if n := len(cfg.Analysis.SpanAttributes); n > 1 {
 			limit /= n
 		}
 		res, err := tempoClient.Search(ctx, q, start, now, limit)
@@ -130,20 +129,18 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 	}
 	slog.Info("built span trees", "traces", len(trees))
 
-	// --- Resolve effective baggage keys ---
-	// If baggage_keys is configured, use it explicitly.
-	// Otherwise, discover from spans — tries baggage-header attribute parsing first,
-	// falls back to non-OTel-semantic root-span keys.
-	baggageKeys := cfg.Analysis.BaggageKeys
-	if len(baggageKeys) == 0 {
-		baggageKeys = analysis.DiscoverBaggageKeys(trees)
-		if len(baggageKeys) > 0 {
-			slog.Info("discovered baggage keys", "keys", baggageKeys)
+	// --- Resolve span attributes to track ---
+	// Use the configured list; fall back to discovery when not set.
+	spanAttrs := cfg.Analysis.SpanAttributes
+	if len(spanAttrs) == 0 {
+		spanAttrs = analysis.DiscoverSpanAttributes(trees)
+		if len(spanAttrs) > 0 {
+			slog.Info("discovered span attributes", "attrs", spanAttrs)
 		}
 	}
 
 	// --- Mimir: servicegraph label coverage ---
-	dims := buildDimsByClause(baggageKeys)
+	dims := buildDimsByClause(spanAttrs)
 	sgQuery := fmt.Sprintf(`count by (client, server%s) (traces_service_graph_request_total)`, dims)
 	metricSamples, err := mimirClient.Query(ctx, sgQuery, now)
 	if err != nil {
@@ -152,20 +149,21 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 
 	// --- Analysis ---
 	rootAnomalies := analysis.DetectRootAnomalies(trees, cfg.Analysis.MinCalleeCount, cfg.Analysis.RootAnomalyThreshold, now)
-	baggageDrops := analysis.DetectBaggageDrops(trees, baggageKeys, now)
-	labelGaps := analysis.DetectLabelGaps(trees, metricSamples, baggageKeys, now)
-	// Flag any service with less than 100% baggage coverage across its spans.
-	coverageAnomalies := analysis.DetectNoCoverage(trees, baggageKeys, cfg.Analysis.MinCalleeCount, 0.99, now)
+	baggageDrops := analysis.DetectBaggagePropagation(trees, now)
+	attributeDrops := analysis.DetectSpanAttributeDrops(trees, spanAttrs, now)
+	labelGaps := analysis.DetectLabelGaps(trees, metricSamples, spanAttrs, now)
+	coverageAnomalies := analysis.DetectNoCoverage(trees, spanAttrs, cfg.Analysis.MinCalleeCount, 0.99, now)
 
 	allServices := collectServices(trees)
 
 	rpt := &report.Report{
 		Window:            now,
-		BaggageKeys:       baggageKeys,
+		SpanAttributes:    spanAttrs,
 		TracesSampled:     len(traceIDs),
 		AllServices:       allServices,
 		RootAnomalies:     rootAnomalies,
 		BaggageDrops:      baggageDrops,
+		AttributeDrops:    attributeDrops,
 		LabelGaps:         labelGaps,
 		CoverageAnomalies: coverageAnomalies,
 	}
@@ -185,7 +183,7 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 		if err := st.SaveSpans(ctx, tickID, trees); err != nil {
 			slog.Warn("failed to save spans", "err", err)
 		}
-		if err := st.SaveFindings(ctx, tickID, rootAnomalies, baggageDrops, labelGaps); err != nil {
+		if err := st.SaveFindings(ctx, tickID, rootAnomalies, attributeDrops, labelGaps); err != nil {
 			slog.Warn("failed to save findings", "err", err)
 		}
 	}
@@ -204,8 +202,6 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 	return nil
 }
 
-// collectServices returns a sorted slice of all unique service names seen
-// across all span trees in this tick.
 func collectServices(trees [][]*tempo.Span) []string {
 	seen := map[string]struct{}{}
 	for _, roots := range trees {
