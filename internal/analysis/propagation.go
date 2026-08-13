@@ -31,33 +31,33 @@ func isBaggageHeaderAttr(key string) bool {
 // DetectBaggagePropagation detects service edges where the W3C baggage header
 // is not being forwarded to the downstream service.
 //
-// The signal is a span attribute that captures the incoming HTTP baggage header
-// — most commonly "http.request.header.baggage" set by OTel HTTP server
-// instrumentation. If a parent span carries this attribute but the child's span
-// does not, the parent service did not include the baggage header on its outgoing
-// request to the child.
+// headerAttr names the span attribute that captures the incoming HTTP baggage
+// header (e.g. "ind.baggage.cj" or the OTel standard
+// "http.request.header.baggage"). When empty, the key is auto-detected by
+// scanning spans for any attribute matching isBaggageHeaderAttr.
 //
-// Returns nil if no baggage header attribute is found in the data — this means
-// the instrumentation is not configured to capture request headers, and
+// Returns nil if the baggage header attribute is not found in the data — this
+// means the instrumentation is not configured to capture request headers, and
 // propagation cannot be assessed from trace data alone.
-func DetectBaggagePropagation(trees [][]*tempo.Span, window time.Time) []BaggagePropagationDrop {
-	// First pass: find which baggage header attribute key is present in this dataset.
-	headerAttr := ""
-outer:
-	for _, roots := range trees {
-		tempo.Walk(roots, func(_, span *tempo.Span) {
-			if headerAttr != "" {
-				return
-			}
-			for k := range span.Attrs {
-				if isBaggageHeaderAttr(k) {
-					headerAttr = k
+func DetectBaggagePropagation(trees [][]*tempo.Span, headerAttr string, window time.Time) []BaggagePropagationDrop {
+	if headerAttr == "" {
+		// Auto-detect: first pass to find which key is present in the dataset.
+	outer:
+		for _, roots := range trees {
+			tempo.Walk(roots, func(_, span *tempo.Span) {
+				if headerAttr != "" {
 					return
 				}
+				for k := range span.Attrs {
+					if isBaggageHeaderAttr(k) {
+						headerAttr = k
+						return
+					}
+				}
+			})
+			if headerAttr != "" {
+				break outer
 			}
-		})
-		if headerAttr != "" {
-			break outer
 		}
 	}
 	if headerAttr == "" {

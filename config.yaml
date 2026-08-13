@@ -10,7 +10,9 @@ mimir:
   tenant_id: ""          # same pattern as tempo
 
 analysis:
-  # span_attributes: [tenant, country]  # omit to auto-discover from live span data
+  # span_attributes: [tenant, country]    # omit to auto-discover from live span data
+  # baggage_header_attribute: ind.baggage.cj  # span attr that captures the W3C baggage header;
+  #                                            # omit to auto-detect (looks for *.baggage attrs)
   root_anomaly_threshold: 0.001
   min_callee_count: 50
 

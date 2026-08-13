@@ -28,9 +28,10 @@ type MimirConfig struct {
 }
 
 type AnalysisConfig struct {
-	SpanAttributes        []string `yaml:"span_attributes"`
-	RootAnomalyThreshold  float64  `yaml:"root_anomaly_threshold"`
-	MinCalleeCount        int      `yaml:"min_callee_count"`
+	SpanAttributes       []string `yaml:"span_attributes"`
+	BaggageHeaderAttr    string   `yaml:"baggage_header_attribute"` // e.g. "ind.baggage.cj"; empty = auto-detect
+	RootAnomalyThreshold float64  `yaml:"root_anomaly_threshold"`
+	MinCalleeCount       int      `yaml:"min_callee_count"`
 }
 
 type OutputConfig struct {

@@ -149,8 +149,9 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 
 	// --- Analysis ---
 	rootAnomalies := analysis.DetectRootAnomalies(trees, cfg.Analysis.MinCalleeCount, cfg.Analysis.RootAnomalyThreshold, now)
-	baggageDrops := analysis.DetectBaggagePropagation(trees, now)
+	baggageDrops := analysis.DetectBaggagePropagation(trees, cfg.Analysis.BaggageHeaderAttr, now)
 	attributeDrops := analysis.DetectSpanAttributeDrops(trees, spanAttrs, now)
+	attrSamples := analysis.SampleAttributeValues(trees, spanAttrs, 5)
 	labelGaps := analysis.DetectLabelGaps(trees, metricSamples, spanAttrs, now)
 	coverageAnomalies := analysis.DetectNoCoverage(trees, spanAttrs, cfg.Analysis.MinCalleeCount, 0.99, now)
 
@@ -159,6 +160,8 @@ func runTick(ctx context.Context, cfg *config.Config, tempoClient *tempo.Client,
 	rpt := &report.Report{
 		Window:            now,
 		SpanAttributes:    spanAttrs,
+		BaggageHeaderAttr: cfg.Analysis.BaggageHeaderAttr,
+		AttributeSamples:  attrSamples,
 		TracesSampled:     len(traceIDs),
 		AllServices:       allServices,
 		RootAnomalies:     rootAnomalies,

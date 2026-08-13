@@ -14,15 +14,17 @@ import (
 
 // Report aggregates all findings from one analysis tick.
 type Report struct {
-	Window             time.Time                        `json:"window"`
-	SpanAttributes     []string                         `json:"span_attributes,omitempty"`
-	TracesSampled      int                              `json:"traces_sampled,omitempty"`
-	AllServices        []string                         `json:"all_services,omitempty"`
-	RootAnomalies      []analysis.RootAnomaly           `json:"root_anomalies"`
-	BaggageDrops       []analysis.BaggagePropagationDrop `json:"baggage_drops,omitempty"`
-	AttributeDrops     []analysis.SpanAttributeDrop     `json:"attribute_drops"`
-	LabelGaps          []analysis.LabelGap              `json:"label_gaps"`
-	CoverageAnomalies  []analysis.CoverageAnomaly       `json:"coverage_anomalies,omitempty"`
+	Window            time.Time                         `json:"window"`
+	SpanAttributes    []string                          `json:"span_attributes,omitempty"`
+	BaggageHeaderAttr string                            `json:"baggage_header_attribute,omitempty"`
+	AttributeSamples  map[string][]string               `json:"attribute_samples,omitempty"`
+	TracesSampled     int                               `json:"traces_sampled,omitempty"`
+	AllServices       []string                          `json:"all_services,omitempty"`
+	RootAnomalies     []analysis.RootAnomaly            `json:"root_anomalies"`
+	BaggageDrops      []analysis.BaggagePropagationDrop `json:"baggage_drops,omitempty"`
+	AttributeDrops    []analysis.SpanAttributeDrop      `json:"attribute_drops"`
+	LabelGaps         []analysis.LabelGap               `json:"label_gaps"`
+	CoverageAnomalies []analysis.CoverageAnomaly        `json:"coverage_anomalies,omitempty"`
 }
 
 // WriteJSON encodes the report as indented JSON to w.
@@ -104,10 +106,30 @@ func (r *Report) WriteSummary(w io.Writer) {
 		attrs = "(none configured — set span_attributes or run once to discover)"
 	}
 
+	baggageAttrLabel := r.BaggageHeaderAttr
+	if baggageAttrLabel == "" {
+		baggageAttrLabel = "(auto-detect)"
+	}
+
 	fmt.Fprintf(w, "=== Propagation Health — %s ===\n", r.Window.Format("2006-01-02T15:04:05Z"))
 	fmt.Fprintf(w, "Span attributes tracked: %s\n", attrs)
+	fmt.Fprintf(w, "Baggage header attribute: %s\n", baggageAttrLabel)
 	fmt.Fprintf(w, "Traces sampled: %d   Services: %d\n\n",
 		r.TracesSampled, len(r.AllServices))
+
+	// --- Attribute samples ---
+	if len(r.AttributeSamples) > 0 {
+		fmt.Fprintln(w, "[INFO] Sample values collected for tracked span attributes:")
+		keys := make([]string, 0, len(r.AttributeSamples))
+		for k := range r.AttributeSamples {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(w, "  %-30s  %s\n", k, strings.Join(r.AttributeSamples[k], ", "))
+		}
+		fmt.Fprintln(w)
+	}
 
 	affectedServices := map[string]bool{}
 
@@ -125,9 +147,13 @@ func (r *Report) WriteSummary(w io.Writer) {
 		fmt.Fprintf(w, "    The BaggagePropagator must be in the propagator chain for all HTTP clients.\n\n")
 	} else if r.TracesSampled > 0 {
 		fmt.Fprintln(w, "[INFO] Baggage header propagation: no data.")
-		fmt.Fprintln(w, "  http.request.header.baggage was not found in any span. Configure your OTel")
-		fmt.Fprintln(w, "  HTTP server instrumentation to capture the baggage request header if you")
-		fmt.Fprintf(w, "  want to verify propagation at the HTTP level.\n\n")
+		if r.BaggageHeaderAttr != "" {
+			fmt.Fprintf(w, "  Attribute %q was not found in any sampled span.\n", r.BaggageHeaderAttr)
+			fmt.Fprintf(w, "  Verify instrumentation captures the baggage request header.\n\n")
+		} else {
+			fmt.Fprintln(w, "  No baggage header attribute found. Set baggage_header_attribute in")
+			fmt.Fprintf(w, "  config.yaml, or verify OTel HTTP instrumentation captures the baggage header.\n\n")
+		}
 	}
 
 	// --- Span attribute coverage ---

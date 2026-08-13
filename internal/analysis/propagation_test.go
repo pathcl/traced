@@ -14,7 +14,7 @@ func TestDetectBaggagePropagation_noHeaderAttr(t *testing.T) {
 	child := makeSpanWithAttrs("s2", "s1", "billing", map[string]string{"tenant": "acme"})
 	parent.Children = []*tempo.Span{child}
 
-	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, time.Now())
+	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, "", time.Now())
 	if drops != nil {
 		t.Errorf("expected nil when no baggage header attr found, got %+v", drops)
 	}
@@ -28,7 +28,7 @@ func TestDetectBaggagePropagation_noDrop(t *testing.T) {
 		map[string]string{"http.request.header.baggage": "tenant=acme,country=es"})
 	parent.Children = []*tempo.Span{child}
 
-	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, time.Now())
+	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, "", time.Now())
 	if len(drops) != 0 {
 		t.Errorf("expected no drops, got %+v", drops)
 	}
@@ -41,7 +41,7 @@ func TestDetectBaggagePropagation_drop(t *testing.T) {
 	child := makeSpanWithAttrs("s2", "s1", "billing", map[string]string{})
 	parent.Children = []*tempo.Span{child}
 
-	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, time.Now())
+	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, "", time.Now())
 	if len(drops) != 1 {
 		t.Fatalf("expected 1 drop, got %d", len(drops))
 	}
@@ -76,7 +76,7 @@ func TestDetectBaggagePropagation_partialDrop(t *testing.T) {
 		trees = append(trees, []*tempo.Span{p})
 	}
 
-	drops := DetectBaggagePropagation(trees, time.Now())
+	drops := DetectBaggagePropagation(trees, "", time.Now())
 	if len(drops) != 1 {
 		t.Fatalf("expected 1 drop finding, got %d", len(drops))
 	}
@@ -95,11 +95,35 @@ func TestDetectBaggagePropagation_plainBaggageKey(t *testing.T) {
 	child := makeSpanWithAttrs("s2", "s1", "billing", map[string]string{})
 	parent.Children = []*tempo.Span{child}
 
-	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, time.Now())
+	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, "", time.Now())
 	if len(drops) != 1 {
 		t.Fatalf("expected 1 drop for plain 'baggage' attr, got %d", len(drops))
 	}
 	if drops[0].HeaderAttr != "baggage" {
 		t.Errorf("expected header attr 'baggage', got %q", drops[0].HeaderAttr)
+	}
+}
+
+func TestDetectBaggagePropagation_configuredKey(t *testing.T) {
+	// User configures "ind.baggage.cj" — the auto-detect pattern would not match this.
+	// With an explicit key, we should detect the drop correctly.
+	parent := makeSpanWithAttrs("s1", "", "api",
+		map[string]string{"ind.baggage.cj": "tenant=acme,country=es"})
+	child := makeSpanWithAttrs("s2", "s1", "billing", map[string]string{})
+	parent.Children = []*tempo.Span{child}
+
+	// Without the configured key, auto-detect should return nil.
+	noDrops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, "", time.Now())
+	if noDrops != nil {
+		t.Errorf("auto-detect should miss ind.baggage.cj, got %+v", noDrops)
+	}
+
+	// With the configured key, the drop is found.
+	drops := DetectBaggagePropagation([][]*tempo.Span{{parent}}, "ind.baggage.cj", time.Now())
+	if len(drops) != 1 {
+		t.Fatalf("expected 1 drop with configured key, got %d", len(drops))
+	}
+	if drops[0].HeaderAttr != "ind.baggage.cj" {
+		t.Errorf("expected header attr 'ind.baggage.cj', got %q", drops[0].HeaderAttr)
 	}
 }
